@@ -19,15 +19,11 @@ function slotToCombo(slot: PartySlot): TypeCombo {
     }
   }
   const coveredTypes = TYPES.filter((_, i) => (mask >> i) & 1);
-  return {
-    types: slot.types,
-    label: slot.types.join('/') || 'Empty',
-    coverageMask: mask,
-    coveredTypes,
-  };
+  return { types: slot.types, label: slot.types.join('/') || '', coverageMask: mask, coveredTypes };
 }
 
-function PokemonSearch({ onSelect }: { onSelect: (p: PokemonSpecies) => void }) {
+// ── Search box ────────────────────────────────────────────────────────────────
+function PokemonSearch({ onAdd, disabled }: { onAdd: (p: PokemonSpecies) => void; disabled: boolean }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PokemonSpecies[]>([]);
   const [open, setOpen] = useState(false);
@@ -39,15 +35,15 @@ function PokemonSearch({ onSelect }: { onSelect: (p: PokemonSpecies) => void }) 
   }, [query]);
 
   useEffect(() => {
-    function handleClick(e: MouseEvent) {
+    function onOutsideClick(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
+    document.addEventListener('mousedown', onOutsideClick);
+    return () => document.removeEventListener('mousedown', onOutsideClick);
   }, []);
 
   function select(p: PokemonSpecies) {
-    onSelect(p);
+    onAdd(p);
     setQuery('');
     setOpen(false);
   }
@@ -58,10 +54,11 @@ function PokemonSearch({ onSelect }: { onSelect: (p: PokemonSpecies) => void }) 
         type="text"
         value={query}
         onChange={e => setQuery(e.target.value)}
-        placeholder="Search Pokémon by name..."
-        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+        placeholder={disabled ? 'Party full (6/6)' : 'Search Pokémon by name…'}
+        disabled={disabled}
+        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white disabled:bg-gray-50 disabled:text-gray-400"
       />
-      {open && results.length > 0 && (
+      {open && (
         <ul className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
           {results.map(p => (
             <li key={p.id}>
@@ -79,7 +76,7 @@ function PokemonSearch({ onSelect }: { onSelect: (p: PokemonSpecies) => void }) 
               </button>
             </li>
           ))}
-          {results.length === 0 && query.length >= 2 && (
+          {results.length === 0 && (
             <li className="px-4 py-3 text-sm text-gray-400">No Pokémon found</li>
           )}
         </ul>
@@ -88,231 +85,211 @@ function PokemonSearch({ onSelect }: { onSelect: (p: PokemonSpecies) => void }) 
   );
 }
 
+// ── Type picker ───────────────────────────────────────────────────────────────
+function TypePicker({ onAdd, disabled }: { onAdd: (types: PokemonType[]) => void; disabled: boolean }) {
+  const [pending, setPending] = useState<PokemonType[]>([]);
+
+  function toggle(type: PokemonType) {
+    if (disabled) return;
+    if (pending.includes(type)) {
+      setPending(pending.filter(t => t !== type));
+      return;
+    }
+    const next = [...pending, type];
+    if (next.length === 2) {
+      onAdd(next);
+      setPending([]);
+    } else {
+      setPending(next);
+    }
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2">
+        {TYPES.map(t => {
+          const selected = pending.includes(t);
+          const blocked = !selected && pending.length >= 2;
+          return (
+            <button
+              key={t}
+              onClick={() => toggle(t)}
+              disabled={disabled || blocked}
+              className={`transition-all ${
+                disabled || blocked ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+              } ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
+            >
+              <TypeBadge type={t} size="sm" />
+            </button>
+          );
+        })}
+      </div>
+
+      {/* 1-type confirm */}
+      {pending.length === 1 && (
+        <button
+          onClick={() => { onAdd(pending); setPending([]); }}
+          className="mt-3 flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold px-4 py-1.5 rounded-lg transition-colors"
+        >
+          <TypeBadge type={pending[0]} size="sm" />
+          <span>Add as {pending[0]}-type only</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Party member chip ─────────────────────────────────────────────────────────
+function PartyMember({ slot, onRemove }: { slot: PartySlot; onRemove: () => void }) {
+  return (
+    <div className="flex items-center gap-2 bg-white rounded-2xl px-3 py-2 shadow-sm border border-gray-100">
+      {slot.pokemon && (
+        <img src={getSpriteUrl(slot.pokemon.id)} alt={slot.pokemon.name} className="w-10 h-10 object-contain" />
+      )}
+      <div className="flex flex-col gap-0.5 min-w-0">
+        {slot.pokemon && (
+          <p className="text-xs font-bold text-gray-700 truncate">{slot.pokemon.name}</p>
+        )}
+        <div className="flex gap-1 flex-wrap">
+          {slot.types.map(t => <TypeBadge key={t} type={t} size="sm" />)}
+        </div>
+      </div>
+      <button
+        onClick={onRemove}
+        className="ml-2 text-gray-300 hover:text-red-400 text-lg leading-none flex-shrink-0 transition-colors"
+        aria-label="Remove"
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
 export function SmartBuilder() {
-  const [party, setParty] = useState<PartySlot[]>([{ pokemon: null, types: [] }]);
-  const [activeSlot, setActiveSlot] = useState(0);
+  const [party, setParty] = useState<PartySlot[]>([]);
   const [solutionIndex, setSolutionIndex] = useState(0);
+
+  const full = party.length >= 6;
+
+  function addToParty(types: PokemonType[], pokemon?: PokemonSpecies) {
+    if (full) return;
+    setParty(prev => [...prev, { types, pokemon: pokemon ?? null }]);
+  }
+
+  function removeFromParty(idx: number) {
+    setParty(prev => prev.filter((_, i) => i !== idx));
+  }
 
   const partyCombos = useMemo(() => party.map(slotToCombo), [party]);
   const { coveredMask, coveredTypes } = useMemo(() => computePartyCoverage(partyCombos), [partyCombos]);
-  const completion = useMemo(() => {
-    setSolutionIndex(0);
-    return findMinimumCoverageFrom(coveredMask);
-  }, [coveredMask]);
-
+  const completion = useMemo(() => { setSolutionIndex(0); return findMinimumCoverageFrom(coveredMask); }, [coveredMask]);
   const completionSolution = completion.solutions[solutionIndex] ?? completion.solutions[0] ?? [];
   const totalCoveredTypes = useMemo(() => {
     const allMask = coveredMask | completionSolution.reduce((m, c) => m | c.coverageMask, 0);
     return TYPES.filter((_, i) => (allMask >> i) & 1);
   }, [coveredMask, completionSolution]);
 
-  function selectPokemon(p: PokemonSpecies) {
-    setParty(prev => {
-      const updated = [...prev];
-      updated[activeSlot] = { pokemon: p, types: [...p.types] };
-      return updated;
-    });
-  }
-
-  function toggleType(type: PokemonType) {
-    setParty(prev => {
-      const updated = [...prev];
-      const slot = { ...updated[activeSlot], pokemon: null };
-      if (slot.types.includes(type)) {
-        slot.types = slot.types.filter(t => t !== type);
-      } else if (slot.types.length < 2) {
-        slot.types = [...slot.types, type];
-      }
-      updated[activeSlot] = slot;
-      return updated;
-    });
-  }
-
-  function clearSlot() {
-    setParty(prev => {
-      const updated = [...prev];
-      updated[activeSlot] = { pokemon: null, types: [] };
-      return updated;
-    });
-  }
-
-  function addSlot() {
-    if (party.length < 6) {
-      setParty(prev => [...prev, { pokemon: null, types: [] }]);
-      setActiveSlot(party.length);
-    }
-  }
-
-  function removeSlot(idx: number) {
-    setParty(prev => {
-      const updated = prev.filter((_, i) => i !== idx);
-      return updated.length === 0 ? [{ pokemon: null, types: [] }] : updated;
-    });
-    setActiveSlot(s => Math.max(0, Math.min(s, party.length - 2)));
-  }
-
-  const currentSlot = party[activeSlot];
   const alreadyCovered = coveredTypes.length === TYPES.length;
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Section: Your Pokémon */}
+
+      {/* ── Your party ── */}
       <div className="flex flex-col gap-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-800">Your Pokémon</h2>
-          <button
-            onClick={addSlot}
-            disabled={party.length >= 6}
-            className="text-sm bg-indigo-600 text-white px-4 py-1.5 rounded-lg disabled:opacity-40 hover:bg-indigo-700 transition-colors"
-          >
-            + Add Pokémon
-          </button>
-        </div>
+        <h2 className="text-xl font-bold text-gray-800">Your Pokémon</h2>
 
-        {/* Slot tabs */}
-        <div className="flex flex-wrap gap-2">
-          {party.map((slot, idx) => (
-            <div key={idx} className="relative">
-              <button
-                onClick={() => setActiveSlot(idx)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
-                  activeSlot === idx
-                    ? 'bg-indigo-600 text-white shadow-md'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {slot.pokemon && (
-                  <img src={getSpriteUrl(slot.pokemon.id)} alt="" className="w-5 h-5 object-contain" />
-                )}
-                {slot.pokemon ? slot.pokemon.name : slot.types.length > 0 ? slot.types.join('/') : `Slot ${idx + 1}`}
-              </button>
-              {party.length > 1 && (
-                <button
-                  onClick={() => removeSlot(idx)}
-                  className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white rounded-full text-xs flex items-center justify-center leading-none hover:bg-red-600"
-                >
-                  ×
-                </button>
-              )}
-            </div>
-          ))}
-        </div>
+        {/* Party chips */}
+        {party.length > 0 ? (
+          <div className="flex flex-wrap gap-2">
+            {party.map((slot, idx) => (
+              <PartyMember key={idx} slot={slot} onRemove={() => removeFromParty(idx)} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-gray-400 italic">No Pokémon added yet — search or pick types below.</p>
+        )}
 
-        {/* Slot editor */}
+        {/* Add panel */}
         <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <p className="text-sm font-semibold text-gray-700">
-              Pokémon {activeSlot + 1}
-              {currentSlot.pokemon && (
-                <span className="ml-2 text-indigo-600">— {currentSlot.pokemon.name}</span>
-              )}
-            </p>
-            {(currentSlot.pokemon || currentSlot.types.length > 0) && (
-              <button onClick={clearSlot} className="text-xs text-red-400 hover:text-red-600">
-                Clear
-              </button>
-            )}
+          <p className="text-sm font-semibold text-gray-600">
+            {full ? '🎒 Party is full (6/6)' : 'Add a Pokémon'}
+          </p>
+
+          <PokemonSearch
+            onAdd={p => addToParty([...p.types], p)}
+            disabled={full}
+          />
+
+          <div className="flex items-center gap-2 text-xs text-gray-400">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span>or pick types</span>
+            <div className="flex-1 h-px bg-gray-100" />
           </div>
 
-          {/* Pokémon search */}
-          <PokemonSearch onSelect={selectPokemon} />
+          <TypePicker onAdd={types => addToParty(types)} disabled={full} />
+        </div>
 
-          {/* Current species display */}
-          {currentSlot.pokemon && (
-            <div className="flex items-center gap-3 bg-indigo-50 rounded-xl px-4 py-3">
-              <img src={getSpriteUrl(currentSlot.pokemon.id)} alt={currentSlot.pokemon.name} className="w-14 h-14 object-contain" />
-              <div>
-                <p className="font-bold text-gray-800">{currentSlot.pokemon.name}</p>
-                <div className="flex gap-1.5 mt-1">
-                  {currentSlot.pokemon.types.map(t => <TypeBadge key={t} type={t} size="sm" />)}
+        {party.length > 0 && <CoverageGrid coveredTypes={coveredTypes} />}
+      </div>
+
+      {/* ── Optimal completion ── */}
+      {party.length > 0 && (
+        <>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-px bg-gray-200" />
+            <span className="text-sm font-semibold text-gray-400">Optimal Completion</span>
+            <div className="flex-1 h-px bg-gray-200" />
+          </div>
+
+          {alreadyCovered ? (
+            <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
+              <p className="text-2xl mb-1">🎉</p>
+              <p className="text-green-700 font-bold text-lg">Full coverage achieved!</p>
+              <p className="text-green-600 text-sm mt-1">Your current party already covers all 18 types.</p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <div className="bg-indigo-600 rounded-2xl p-5 shadow text-white">
+                <div className="flex items-center gap-3">
+                  <span className="text-3xl font-black">{completion.minCount}</span>
+                  <div>
+                    <p className="font-bold">additional Pokémon needed</p>
+                    <p className="text-indigo-200 text-sm">to complete full coverage given your current party</p>
+                  </div>
                 </div>
+                {completion.solutions.length > 1 && (
+                  <div className="flex items-center gap-2 mt-3">
+                    <span className="text-indigo-200 text-xs">{completion.solutions.length} solutions:</span>
+                    <div className="flex gap-1">
+                      {completion.solutions.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setSolutionIndex(i)}
+                          className={`w-6 h-6 rounded-full text-xs font-bold transition-all ${
+                            i === solutionIndex ? 'bg-white text-indigo-600' : 'bg-indigo-500 text-white hover:bg-indigo-400'
+                          }`}
+                        >
+                          {i + 1}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
 
-          {/* Manual type picker */}
-          <div>
-            <p className="text-xs text-gray-400 mb-2">
-              {currentSlot.pokemon ? 'Or override types manually:' : 'Or pick types directly (up to 2):'}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {TYPES.map(t => {
-                const selected = currentSlot.types.includes(t);
-                const disabled = !selected && currentSlot.types.length >= 2;
-                return (
-                  <button
-                    key={t}
-                    onClick={() => !disabled && toggleType(t)}
-                    className={`transition-all ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'} ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
-                  >
-                    <TypeBadge type={t} size="sm" />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-
-        {/* Coverage from party */}
-        <CoverageGrid coveredTypes={coveredTypes} />
-      </div>
-
-      {/* Divider */}
-      <div className="flex items-center gap-3">
-        <div className="flex-1 h-px bg-gray-200" />
-        <span className="text-sm font-semibold text-gray-400">Optimal Completion</span>
-        <div className="flex-1 h-px bg-gray-200" />
-      </div>
-
-      {/* Section: Optimal Completion */}
-      {alreadyCovered ? (
-        <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
-          <p className="text-2xl mb-1">🎉</p>
-          <p className="text-green-700 font-bold text-lg">Full coverage achieved!</p>
-          <p className="text-green-600 text-sm mt-1">Your current party already covers all 18 types.</p>
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div className="bg-indigo-600 rounded-2xl p-5 shadow text-white">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl font-black">{completion.minCount}</span>
-              <div>
-                <p className="font-bold">additional Pokémon needed</p>
-                <p className="text-indigo-200 text-sm">to complete full coverage given your current party</p>
-              </div>
-            </div>
-            {completion.solutions.length > 1 && (
-              <div className="flex items-center gap-2 mt-3">
-                <span className="text-indigo-200 text-xs">{completion.solutions.length} solutions:</span>
-                <div className="flex gap-1">
-                  {completion.solutions.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setSolutionIndex(i)}
-                      className={`w-6 h-6 rounded-full text-xs font-bold transition-all ${
-                        i === solutionIndex ? 'bg-white text-indigo-600' : 'bg-indigo-500 text-white hover:bg-indigo-400'
-                      }`}
-                    >
-                      {i + 1}
-                    </button>
+              {completionSolution.length > 0 && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {completionSolution.map((combo, i) => (
+                    <PokemonCard key={i} combo={combo} index={i} />
                   ))}
                 </div>
-              </div>
-            )}
-          </div>
+              )}
 
-          {completionSolution.length > 0 && (
-            <div className="grid gap-4 sm:grid-cols-2">
-              {completionSolution.map((combo, i) => (
-                <PokemonCard key={i} combo={combo} index={i} />
-              ))}
+              {completionSolution.length > 0 && <CoverageGrid coveredTypes={totalCoveredTypes} />}
             </div>
           )}
-
-          {completionSolution.length > 0 && (
-            <CoverageGrid coveredTypes={totalCoveredTypes} />
-          )}
-        </div>
+        </>
       )}
     </div>
   );
