@@ -3,8 +3,9 @@ import { findMinimumCoverage } from './utils/setCover';
 import { PokemonCard } from './components/PokemonCard';
 import { CoverageGrid } from './components/CoverageGrid';
 import { PartyBuilder } from './components/PartyBuilder';
+import { SmartBuilder } from './components/SmartBuilder';
 
-type Tab = 'optimal' | 'builder';
+type Tab = 'optimal' | 'smart' | 'builder';
 
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('optimal');
@@ -38,7 +39,11 @@ function App() {
 
         {/* Tabs */}
         <div className="flex gap-2 bg-gray-100 p-1 rounded-xl w-fit">
-          {(['optimal', 'builder'] as const).map(tab => (
+          {([
+            ['optimal', '🏆 Optimal Solution'],
+            ['smart',   '✨ Smart Builder'],
+            ['builder', '🔧 Party Builder'],
+          ] as const).map(([tab, label]) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
@@ -48,7 +53,7 @@ function App() {
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              {tab === 'optimal' ? '🏆 Optimal Solution' : '🔧 Party Builder'}
+              {label}
             </button>
           ))}
         </div>
@@ -127,6 +132,7 @@ function App() {
           </>
         )}
 
+        {activeTab === 'smart' && <SmartBuilder />}
         {activeTab === 'builder' && <PartyBuilder />}
       </main>
 

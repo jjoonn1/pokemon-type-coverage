@@ -52,31 +52,24 @@ export function generateAllCombos(): TypeCombo[] {
   return combos;
 }
 
-export function findMinimumCoverage(): SolverResult {
-  const combos = generateAllCombos();
+function bfsSolve(startMask: number, combos: TypeCombo[]): SolverResult {
+  if (startMask === ALL_TYPES_MASK) return { minCount: 0, solutions: [[]] };
 
-  // BFS over bitmask states
-  // dp[mask] = { steps, prevMask, comboUsed }
   const dp: Array<{ steps: number; prevMask: number; comboIdx: number } | null> =
     new Array(ALL_TYPES_MASK + 1).fill(null);
 
-  dp[0] = { steps: 0, prevMask: -1, comboIdx: -1 };
+  dp[startMask] = { steps: 0, prevMask: -1, comboIdx: -1 };
 
-  const queue: number[] = [0];
+  const queue: number[] = [startMask];
   let found = false;
 
   while (queue.length > 0 && !found) {
     const current = queue.shift()!;
     const currentSteps = dp[current]!.steps;
 
-    if (current === ALL_TYPES_MASK) {
-      found = true;
-      break;
-    }
-
     for (let ci = 0; ci < combos.length; ci++) {
       const next = current | combos[ci].coverageMask;
-      if (next === current) continue; // no new coverage
+      if (next === current) continue;
       if (dp[next] === null) {
         dp[next] = { steps: currentSteps + 1, prevMask: current, comboIdx: ci };
         queue.push(next);
@@ -88,48 +81,28 @@ export function findMinimumCoverage(): SolverResult {
     }
   }
 
-  if (!dp[ALL_TYPES_MASK]) {
-    return { minCount: -1, solutions: [] };
-  }
+  if (!dp[ALL_TYPES_MASK]) return { minCount: -1, solutions: [] };
 
-  // Reconstruct the path
   const minCount = dp[ALL_TYPES_MASK]!.steps;
-
-  // Find all solutions with that many steps using DFS
   const solutions: TypeCombo[][] = [];
   const MAX_SOLUTIONS = 20;
 
-  function findAllSolutions(
-    mask: number,
-    remaining: number,
-    path: TypeCombo[],
-    startComboIdx: number
-  ) {
+  function findAllSolutions(mask: number, remaining: number, path: TypeCombo[], startIdx: number) {
     if (solutions.length >= MAX_SOLUTIONS) return;
-
-    if (mask === ALL_TYPES_MASK) {
-      solutions.push([...path]);
-      return;
-    }
-
+    if (mask === ALL_TYPES_MASK) { solutions.push([...path]); return; }
     if (remaining === 0) return;
 
-    for (let ci = startComboIdx; ci < combos.length; ci++) {
+    for (let ci = startIdx; ci < combos.length; ci++) {
       const next = mask | combos[ci].coverageMask;
-      if (next === mask) continue; // no new coverage
-
-      // Pruning: check if it's still possible to cover all types
-      // in `remaining - 1` more steps
-      // (simple check: uncovered bits that can be covered)
+      if (next === mask) continue;
       path.push(combos[ci]);
       findAllSolutions(next, remaining - 1, path, ci + 1);
       path.pop();
     }
   }
 
-  findAllSolutions(0, minCount, [], 0);
+  findAllSolutions(startMask, minCount, [], 0);
 
-  // If DFS found nothing (can happen with ordering), fall back to reconstructed path
   if (solutions.length === 0) {
     const path: TypeCombo[] = [];
     let mask = ALL_TYPES_MASK;
@@ -141,6 +114,14 @@ export function findMinimumCoverage(): SolverResult {
   }
 
   return { minCount, solutions };
+}
+
+export function findMinimumCoverage(): SolverResult {
+  return bfsSolve(0, generateAllCombos());
+}
+
+export function findMinimumCoverageFrom(startMask: number): SolverResult {
+  return bfsSolve(startMask, generateAllCombos());
 }
 
 export function computePartyCoverage(party: TypeCombo[]): {
