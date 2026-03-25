@@ -1,11 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useEffect } from 'react';
 import { TYPES, PokemonType, SUPER_EFFECTIVE, TYPE_INDEX } from '../data/typeChart';
 import { TypeCombo, computePartyCoverage, findMinimumCoverageFrom } from '../utils/setCover';
+import { PokemonSpecies, searchPokemon, getSpriteUrl } from '../data/pokemonSpecies';
 import { TypeBadge } from './TypeBadge';
 import { PokemonCard } from './PokemonCard';
 import { CoverageGrid } from './CoverageGrid';
 
 interface PartySlot {
+  pokemon: PokemonSpecies | null;
   types: PokemonType[];
 }
 
@@ -25,8 +27,69 @@ function slotToCombo(slot: PartySlot): TypeCombo {
   };
 }
 
+function PokemonSearch({ onSelect }: { onSelect: (p: PokemonSpecies) => void }) {
+  const [query, setQuery] = useState('');
+  const [results, setResults] = useState<PokemonSpecies[]>([]);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setResults(searchPokemon(query));
+    setOpen(query.length >= 2);
+  }, [query]);
+
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
+
+  function select(p: PokemonSpecies) {
+    onSelect(p);
+    setQuery('');
+    setOpen(false);
+  }
+
+  return (
+    <div ref={ref} className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={e => setQuery(e.target.value)}
+        placeholder="Search Pokémon by name..."
+        className="w-full border border-gray-200 rounded-xl px-4 py-2.5 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+      />
+      {open && results.length > 0 && (
+        <ul className="absolute z-20 top-full mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg overflow-hidden">
+          {results.map(p => (
+            <li key={p.id}>
+              <button
+                onClick={() => select(p)}
+                className="w-full flex items-center gap-3 px-4 py-2 hover:bg-indigo-50 text-left"
+              >
+                <img src={getSpriteUrl(p.id)} alt={p.name} className="w-9 h-9 object-contain" />
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{p.name}</p>
+                  <div className="flex gap-1 mt-0.5">
+                    {p.types.map(t => <TypeBadge key={t} type={t} size="sm" />)}
+                  </div>
+                </div>
+              </button>
+            </li>
+          ))}
+          {results.length === 0 && query.length >= 2 && (
+            <li className="px-4 py-3 text-sm text-gray-400">No Pokémon found</li>
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export function SmartBuilder() {
-  const [party, setParty] = useState<PartySlot[]>([{ types: [] }]);
+  const [party, setParty] = useState<PartySlot[]>([{ pokemon: null, types: [] }]);
   const [activeSlot, setActiveSlot] = useState(0);
   const [solutionIndex, setSolutionIndex] = useState(0);
 
@@ -39,14 +102,22 @@ export function SmartBuilder() {
 
   const completionSolution = completion.solutions[solutionIndex] ?? completion.solutions[0] ?? [];
   const totalCoveredTypes = useMemo(() => {
-    const allMasks = coveredMask | completionSolution.reduce((m, c) => m | c.coverageMask, 0);
-    return TYPES.filter((_, i) => (allMasks >> i) & 1);
+    const allMask = coveredMask | completionSolution.reduce((m, c) => m | c.coverageMask, 0);
+    return TYPES.filter((_, i) => (allMask >> i) & 1);
   }, [coveredMask, completionSolution]);
+
+  function selectPokemon(p: PokemonSpecies) {
+    setParty(prev => {
+      const updated = [...prev];
+      updated[activeSlot] = { pokemon: p, types: [...p.types] };
+      return updated;
+    });
+  }
 
   function toggleType(type: PokemonType) {
     setParty(prev => {
       const updated = [...prev];
-      const slot = { ...updated[activeSlot] };
+      const slot = { ...updated[activeSlot], pokemon: null };
       if (slot.types.includes(type)) {
         slot.types = slot.types.filter(t => t !== type);
       } else if (slot.types.length < 2) {
@@ -57,9 +128,17 @@ export function SmartBuilder() {
     });
   }
 
+  function clearSlot() {
+    setParty(prev => {
+      const updated = [...prev];
+      updated[activeSlot] = { pokemon: null, types: [] };
+      return updated;
+    });
+  }
+
   function addSlot() {
     if (party.length < 6) {
-      setParty(prev => [...prev, { types: [] }]);
+      setParty(prev => [...prev, { pokemon: null, types: [] }]);
       setActiveSlot(party.length);
     }
   }
@@ -67,7 +146,7 @@ export function SmartBuilder() {
   function removeSlot(idx: number) {
     setParty(prev => {
       const updated = prev.filter((_, i) => i !== idx);
-      return updated.length === 0 ? [{ types: [] }] : updated;
+      return updated.length === 0 ? [{ pokemon: null, types: [] }] : updated;
     });
     setActiveSlot(s => Math.max(0, Math.min(s, party.length - 2)));
   }
@@ -96,13 +175,16 @@ export function SmartBuilder() {
             <div key={idx} className="relative">
               <button
                 onClick={() => setActiveSlot(idx)}
-                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+                className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all flex items-center gap-1.5 ${
                   activeSlot === idx
                     ? 'bg-indigo-600 text-white shadow-md'
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {slot.types.length > 0 ? slot.types.join('/') : `Slot ${idx + 1}`}
+                {slot.pokemon && (
+                  <img src={getSpriteUrl(slot.pokemon.id)} alt="" className="w-5 h-5 object-contain" />
+                )}
+                {slot.pokemon ? slot.pokemon.name : slot.types.length > 0 ? slot.types.join('/') : `Slot ${idx + 1}`}
               </button>
               {party.length > 1 && (
                 <button
@@ -116,42 +198,62 @@ export function SmartBuilder() {
           ))}
         </div>
 
-        {/* Type picker */}
-        <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100">
-          <p className="text-sm text-gray-500 mb-3">
-            Select up to 2 types for{' '}
-            <span className="font-semibold text-gray-700">Pokémon {activeSlot + 1}</span>
-            {currentSlot.types.length > 0 && (
-              <button
-                onClick={() => setParty(prev => {
-                  const updated = [...prev];
-                  updated[activeSlot] = { types: [] };
-                  return updated;
-                })}
-                className="ml-3 text-xs text-red-400 hover:text-red-600"
-              >
+        {/* Slot editor */}
+        <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-semibold text-gray-700">
+              Pokémon {activeSlot + 1}
+              {currentSlot.pokemon && (
+                <span className="ml-2 text-indigo-600">— {currentSlot.pokemon.name}</span>
+              )}
+            </p>
+            {(currentSlot.pokemon || currentSlot.types.length > 0) && (
+              <button onClick={clearSlot} className="text-xs text-red-400 hover:text-red-600">
                 Clear
               </button>
             )}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {TYPES.map(t => {
-              const selected = currentSlot.types.includes(t);
-              const disabled = !selected && currentSlot.types.length >= 2;
-              return (
-                <button
-                  key={t}
-                  onClick={() => !disabled && toggleType(t)}
-                  className={`transition-all ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'} ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
-                >
-                  <TypeBadge type={t} size="sm" />
-                </button>
-              );
-            })}
+          </div>
+
+          {/* Pokémon search */}
+          <PokemonSearch onSelect={selectPokemon} />
+
+          {/* Current species display */}
+          {currentSlot.pokemon && (
+            <div className="flex items-center gap-3 bg-indigo-50 rounded-xl px-4 py-3">
+              <img src={getSpriteUrl(currentSlot.pokemon.id)} alt={currentSlot.pokemon.name} className="w-14 h-14 object-contain" />
+              <div>
+                <p className="font-bold text-gray-800">{currentSlot.pokemon.name}</p>
+                <div className="flex gap-1.5 mt-1">
+                  {currentSlot.pokemon.types.map(t => <TypeBadge key={t} type={t} size="sm" />)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Manual type picker */}
+          <div>
+            <p className="text-xs text-gray-400 mb-2">
+              {currentSlot.pokemon ? 'Or override types manually:' : 'Or pick types directly (up to 2):'}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {TYPES.map(t => {
+                const selected = currentSlot.types.includes(t);
+                const disabled = !selected && currentSlot.types.length >= 2;
+                return (
+                  <button
+                    key={t}
+                    onClick={() => !disabled && toggleType(t)}
+                    className={`transition-all ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'} ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
+                  >
+                    <TypeBadge type={t} size="sm" />
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
 
-        {/* Coverage from locked party */}
+        {/* Coverage from party */}
         <CoverageGrid coveredTypes={coveredTypes} />
       </div>
 
@@ -171,17 +273,12 @@ export function SmartBuilder() {
         </div>
       ) : (
         <div className="flex flex-col gap-4">
-          {/* Banner */}
-          <div className={`rounded-2xl p-5 shadow text-white ${completion.minCount > 0 ? 'bg-indigo-600' : 'bg-green-600'}`}>
+          <div className="bg-indigo-600 rounded-2xl p-5 shadow text-white">
             <div className="flex items-center gap-3">
               <span className="text-3xl font-black">{completion.minCount}</span>
               <div>
-                <p className="font-bold">
-                  additional Pokémon needed
-                </p>
-                <p className="text-indigo-200 text-sm">
-                  to complete full coverage given your current party
-                </p>
+                <p className="font-bold">additional Pokémon needed</p>
+                <p className="text-indigo-200 text-sm">to complete full coverage given your current party</p>
               </div>
             </div>
             {completion.solutions.length > 1 && (
@@ -204,7 +301,6 @@ export function SmartBuilder() {
             )}
           </div>
 
-          {/* Suggested Pokémon cards */}
           {completionSolution.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               {completionSolution.map((combo, i) => (
@@ -213,7 +309,6 @@ export function SmartBuilder() {
             </div>
           )}
 
-          {/* Combined coverage grid */}
           {completionSolution.length > 0 && (
             <CoverageGrid coveredTypes={totalCoveredTypes} />
           )}

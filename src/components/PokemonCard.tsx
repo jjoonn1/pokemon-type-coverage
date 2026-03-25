@@ -1,6 +1,7 @@
 import { TypeCombo } from '../utils/setCover';
 import { TypeBadge } from './TypeBadge';
-import { EXAMPLE_POKEMON } from '../data/typeChart';
+import { getPokemonForTypes, getSpriteUrl } from '../data/pokemonSpecies';
+import { PokemonType } from '../data/typeChart';
 
 interface PokemonCardProps {
   combo: TypeCombo;
@@ -8,7 +9,7 @@ interface PokemonCardProps {
 }
 
 export function PokemonCard({ combo, index }: PokemonCardProps) {
-  const example = EXAMPLE_POKEMON[combo.label] || EXAMPLE_POKEMON[combo.types.slice().reverse().join('/')] || null;
+  const examples = getPokemonForTypes(combo.types as PokemonType[]).slice(0, 4);
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col gap-3 border border-gray-100">
@@ -34,9 +35,28 @@ export function PokemonCard({ combo, index }: PokemonCardProps) {
         </div>
       </div>
 
-      {example && (
-        <p className="text-xs text-gray-400 italic border-t border-gray-100 pt-2">
-          e.g. {example}
+      {examples.length > 0 ? (
+        <div className="border-t border-gray-100 pt-3">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
+            Example Pokémon
+          </p>
+          <div className="flex gap-3 flex-wrap">
+            {examples.map(p => (
+              <div key={p.id} className="flex flex-col items-center gap-0.5">
+                <img
+                  src={getSpriteUrl(p.id)}
+                  alt={p.name}
+                  className="w-12 h-12 object-contain"
+                  loading="lazy"
+                />
+                <span className="text-xs text-gray-500 text-center leading-tight">{p.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-gray-300 italic border-t border-gray-100 pt-2">
+          No Pokémon in our database for this combo
         </p>
       )}
     </div>
