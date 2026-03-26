@@ -248,65 +248,71 @@ export function SmartBuilder({ availableIds, mechGen }: { availableIds?: Set<num
         {party.length > 0 && <CoverageGrid coveredTypes={coveredTypes} unavailableTypes={unavailableTypes} />}
       </div>
 
-      {/* ── Optimal completion ── */}
-      {party.length > 0 && (
-        <>
-          <div className="flex items-center gap-3">
-            <div className="flex-1 h-px bg-gray-200" />
-            <span className="text-sm font-semibold text-gray-400">Optimal Completion</span>
-            <div className="flex-1 h-px bg-gray-200" />
-          </div>
+      {/* ── Optimal / completion section ── */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 h-px bg-gray-200" />
+        <span className="text-sm font-semibold text-gray-400">
+          {party.length === 0 ? 'Optimal Solution' : 'Optimal Completion'}
+        </span>
+        <div className="flex-1 h-px bg-gray-200" />
+      </div>
 
-          {alreadyCovered ? (
-            <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
-              <p className="text-2xl mb-1">🎉</p>
-              <p className="text-green-700 font-bold text-lg">Full coverage achieved!</p>
-              <p className="text-green-600 text-sm mt-1">
-                Your current party already covers all {TYPES.length - unavailableTypes.length} available types.
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4">
-              <div className="bg-indigo-600 rounded-2xl p-5 shadow text-white">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl font-black">{completion.minCount}</span>
-                  <div>
-                    <p className="font-bold">additional Pokémon needed</p>
-                    <p className="text-indigo-200 text-sm">to complete full coverage given your current party</p>
-                  </div>
-                </div>
-                {completion.solutions.length > 1 && (
-                  <div className="flex items-center gap-2 mt-3">
-                    <span className="text-indigo-200 text-xs">{completion.solutions.length} solutions:</span>
-                    <div className="flex gap-1">
-                      {completion.solutions.map((_, i) => (
-                        <button
-                          key={i}
-                          onClick={() => setSolutionIndex(i)}
-                          className={`w-6 h-6 rounded-full text-xs font-bold transition-all ${
-                            i === solutionIndex ? 'bg-white text-indigo-600' : 'bg-indigo-500 text-white hover:bg-indigo-400'
-                          }`}
-                        >
-                          {i + 1}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+      {alreadyCovered ? (
+        <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
+          <p className="text-2xl mb-1">🎉</p>
+          <p className="text-green-700 font-bold text-lg">Full coverage achieved!</p>
+          <p className="text-green-600 text-sm mt-1">
+            Your current party already covers all {TYPES.length - unavailableTypes.length} available types.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <div className="bg-indigo-600 rounded-2xl p-5 shadow text-white">
+            <div className="flex items-center gap-3">
+              <span className="text-3xl font-black">{completion.minCount}</span>
+              <div>
+                <p className="font-bold">
+                  {party.length === 0 ? 'Pokémon minimum' : 'additional Pokémon needed'}
+                </p>
+                <p className="text-indigo-200 text-sm">
+                  {party.length === 0
+                    ? 'to cover super effectiveness against all types'
+                    : 'to complete full coverage given your current party'}
+                </p>
               </div>
-
-              {completionSolution.length > 0 && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {completionSolution.map((combo, i) => (
-                    <PokemonCard key={i} combo={combo} index={i} availableIds={availableIds} />
+            </div>
+            {completion.solutions.length > 1 && (
+              <div className="flex items-center gap-2 mt-3">
+                <span className="text-indigo-200 text-xs">{completion.solutions.length} solutions:</span>
+                <div className="flex gap-1">
+                  {completion.solutions.map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSolutionIndex(i)}
+                      className={`w-6 h-6 rounded-full text-xs font-bold transition-all ${
+                        i === solutionIndex ? 'bg-white text-indigo-600' : 'bg-indigo-500 text-white hover:bg-indigo-400'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
                   ))}
                 </div>
-              )}
+              </div>
+            )}
+          </div>
 
-              {completionSolution.length > 0 && <CoverageGrid coveredTypes={totalCoveredTypes} unavailableTypes={unavailableTypes} />}
+          {completionSolution.length > 0 && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              {completionSolution.map((combo, i) => (
+                <PokemonCard key={i} combo={combo} index={i} availableIds={availableIds} />
+              ))}
             </div>
           )}
-        </>
+
+          {completionSolution.length > 0 && (
+            <CoverageGrid coveredTypes={totalCoveredTypes} unavailableTypes={unavailableTypes} />
+          )}
+        </div>
       )}
     </div>
   );
