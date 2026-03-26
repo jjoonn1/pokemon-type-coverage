@@ -304,7 +304,17 @@ export function SmartBuilder({ availableIds, mechGen }: { availableIds?: Set<num
           {completionSolution.length > 0 && (
             <div className="grid gap-4 sm:grid-cols-2">
               {completionSolution.map((combo, i) => (
-                <PokemonCard key={i} combo={combo} index={i} availableIds={availableIds} />
+                <PokemonCard
+                  key={i}
+                  combo={combo}
+                  index={i}
+                  availableIds={availableIds}
+                  onAdd={full ? undefined : (pokemon) =>
+                    pokemon
+                      ? addToParty([...pokemon.types], pokemon)
+                      : addToParty(combo.types as PokemonType[])
+                  }
+                />
               ))}
             </div>
           )}
