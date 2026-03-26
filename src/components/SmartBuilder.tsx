@@ -1,7 +1,8 @@
 import { useMemo, useState, useRef, useEffect } from 'react';
 import { TYPES, PokemonType, SUPER_EFFECTIVE, TYPE_INDEX } from '../data/typeChart';
-import { TypeCombo, computePartyCoverage, findMinimumCoverageFrom } from '../utils/setCover';
+import { TypeCombo, computePartyCoverage, findMinimumCoverageFrom, computeTargetMask } from '../utils/setCover';
 import { PokemonSpecies, searchPokemon, getSpriteUrl } from '../data/pokemonSpecies';
+import { UNAVAILABLE_TYPES_BY_GEN } from '../data/games';
 import { TypeBadge } from './TypeBadge';
 import { PokemonCard } from './PokemonCard';
 import { CoverageGrid } from './CoverageGrid';
@@ -23,16 +24,16 @@ function slotToCombo(slot: PartySlot): TypeCombo {
 }
 
 // ── Search box ────────────────────────────────────────────────────────────────
-function PokemonSearch({ onAdd, disabled }: { onAdd: (p: PokemonSpecies) => void; disabled: boolean }) {
+function PokemonSearch({ onAdd, disabled, availableIds }: { onAdd: (p: PokemonSpecies) => void; disabled: boolean; availableIds?: Set<number> }) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<PokemonSpecies[]>([]);
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setResults(searchPokemon(query));
+    setResults(searchPokemon(query, availableIds));
     setOpen(query.length >= 2);
-  }, [query]);
+  }, [query, availableIds]);
 
   useEffect(() => {
     function onOutsideClick(e: MouseEvent) {
@@ -86,11 +87,12 @@ function PokemonSearch({ onAdd, disabled }: { onAdd: (p: PokemonSpecies) => void
 }
 
 // ── Type picker ───────────────────────────────────────────────────────────────
-function TypePicker({ onAdd, disabled }: { onAdd: (types: PokemonType[]) => void; disabled: boolean }) {
+function TypePicker({ onAdd, disabled, mechGen }: { onAdd: (types: PokemonType[]) => void; disabled: boolean; mechGen?: number }) {
   const [pending, setPending] = useState<PokemonType[]>([]);
+  const unavailable = new Set<string>(mechGen !== undefined ? (UNAVAILABLE_TYPES_BY_GEN[mechGen] ?? []) : []);
 
   function toggle(type: PokemonType) {
-    if (disabled) return;
+    if (disabled || unavailable.has(type)) return;
     if (pending.includes(type)) {
       setPending(pending.filter(t => t !== type));
       return;
@@ -109,14 +111,16 @@ function TypePicker({ onAdd, disabled }: { onAdd: (types: PokemonType[]) => void
       <div className="flex flex-wrap gap-2">
         {TYPES.map(t => {
           const selected = pending.includes(t);
+          const isUnavailable = unavailable.has(t);
           const blocked = !selected && pending.length >= 2;
           return (
             <button
               key={t}
               onClick={() => toggle(t)}
-              disabled={disabled || blocked}
+              disabled={disabled || blocked || isUnavailable}
+              title={isUnavailable ? 'Not available in this game' : undefined}
               className={`transition-all ${
-                disabled || blocked ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
+                disabled || blocked || isUnavailable ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'
               } ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
             >
               <TypeBadge type={t} size="sm" />
@@ -166,9 +170,15 @@ function PartyMember({ slot, onRemove }: { slot: PartySlot; onRemove: () => void
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function SmartBuilder() {
+export function SmartBuilder({ availableIds, mechGen }: { availableIds?: Set<number>; mechGen?: number }) {
   const [party, setParty] = useState<PartySlot[]>([]);
   const [solutionIndex, setSolutionIndex] = useState(0);
+
+  const effectiveMechGen = mechGen;
+  const unavailableTypes = useMemo(
+    () => (effectiveMechGen !== undefined ? (UNAVAILABLE_TYPES_BY_GEN[effectiveMechGen] ?? []) as PokemonType[] : []),
+    [effectiveMechGen],
+  );
 
   const full = party.length >= 6;
 
@@ -183,14 +193,18 @@ export function SmartBuilder() {
 
   const partyCombos = useMemo(() => party.map(slotToCombo), [party]);
   const { coveredMask, coveredTypes } = useMemo(() => computePartyCoverage(partyCombos), [partyCombos]);
-  const completion = useMemo(() => { setSolutionIndex(0); return findMinimumCoverageFrom(coveredMask); }, [coveredMask]);
+  const completion = useMemo(() => {
+    setSolutionIndex(0);
+    return findMinimumCoverageFrom(coveredMask, availableIds, mechGen);
+  }, [coveredMask, availableIds, mechGen]);
   const completionSolution = completion.solutions[solutionIndex] ?? completion.solutions[0] ?? [];
   const totalCoveredTypes = useMemo(() => {
     const allMask = coveredMask | completionSolution.reduce((m, c) => m | c.coverageMask, 0);
     return TYPES.filter((_, i) => (allMask >> i) & 1);
   }, [coveredMask, completionSolution]);
 
-  const alreadyCovered = coveredTypes.length === TYPES.length;
+  const targetMask = useMemo(() => computeTargetMask(effectiveMechGen), [effectiveMechGen]);
+  const alreadyCovered = (coveredMask & targetMask) === targetMask;
 
   return (
     <div className="flex flex-col gap-6">
@@ -219,6 +233,7 @@ export function SmartBuilder() {
           <PokemonSearch
             onAdd={p => addToParty([...p.types], p)}
             disabled={full}
+            availableIds={availableIds}
           />
 
           <div className="flex items-center gap-2 text-xs text-gray-400">
@@ -227,10 +242,10 @@ export function SmartBuilder() {
             <div className="flex-1 h-px bg-gray-100" />
           </div>
 
-          <TypePicker onAdd={types => addToParty(types)} disabled={full} />
+          <TypePicker onAdd={types => addToParty(types)} disabled={full} mechGen={effectiveMechGen} />
         </div>
 
-        {party.length > 0 && <CoverageGrid coveredTypes={coveredTypes} />}
+        {party.length > 0 && <CoverageGrid coveredTypes={coveredTypes} unavailableTypes={unavailableTypes} />}
       </div>
 
       {/* ── Optimal completion ── */}
@@ -246,7 +261,9 @@ export function SmartBuilder() {
             <div className="bg-green-50 border border-green-200 rounded-2xl p-6 text-center">
               <p className="text-2xl mb-1">🎉</p>
               <p className="text-green-700 font-bold text-lg">Full coverage achieved!</p>
-              <p className="text-green-600 text-sm mt-1">Your current party already covers all 18 types.</p>
+              <p className="text-green-600 text-sm mt-1">
+                Your current party already covers all {TYPES.length - unavailableTypes.length} available types.
+              </p>
             </div>
           ) : (
             <div className="flex flex-col gap-4">
@@ -281,12 +298,12 @@ export function SmartBuilder() {
               {completionSolution.length > 0 && (
                 <div className="grid gap-4 sm:grid-cols-2">
                   {completionSolution.map((combo, i) => (
-                    <PokemonCard key={i} combo={combo} index={i} />
+                    <PokemonCard key={i} combo={combo} index={i} availableIds={availableIds} />
                   ))}
                 </div>
               )}
 
-              {completionSolution.length > 0 && <CoverageGrid coveredTypes={totalCoveredTypes} />}
+              {completionSolution.length > 0 && <CoverageGrid coveredTypes={totalCoveredTypes} unavailableTypes={unavailableTypes} />}
             </div>
           )}
         </>

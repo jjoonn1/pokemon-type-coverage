@@ -1,24 +1,36 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { TYPES, PokemonType } from '../data/typeChart';
-import { TypeCombo, generateAllCombos, computePartyCoverage } from '../utils/setCover';
+import { TypeCombo, generateAllCombos, generateCombosForGame, computePartyCoverage } from '../utils/setCover';
+import { UNAVAILABLE_TYPES_BY_GEN } from '../data/games';
 import { TypeBadge } from './TypeBadge';
 import { CoverageGrid } from './CoverageGrid';
-
-const ALL_COMBOS = generateAllCombos();
 
 interface PartySlot {
   types: PokemonType[];
 }
 
-export function PartyBuilder() {
+export function PartyBuilder({ availableIds, mechGen }: { availableIds?: Set<number>; mechGen?: number }) {
   const [party, setParty] = useState<PartySlot[]>([{ types: [] }]);
   const [activeSlot, setActiveSlot] = useState(0);
+
+  const combos = useMemo(
+    () => availableIds ? generateCombosForGame(availableIds, mechGen ?? 9) : generateAllCombos(),
+    [availableIds, mechGen],
+  );
+  const unavailable = useMemo(
+    () => new Set<string>(mechGen !== undefined ? (UNAVAILABLE_TYPES_BY_GEN[mechGen] ?? []) : []),
+    [mechGen],
+  );
+  const unavailableTypes = useMemo(
+    () => TYPES.filter(t => unavailable.has(t)),
+    [unavailable],
+  );
 
   const partyAsCombos: TypeCombo[] = party.map(slot => {
     if (slot.types.length === 0) return { types: [], label: '', coverageMask: 0, coveredTypes: [] };
     const key = slot.types.length === 1 ? slot.types[0] : `${slot.types[0]}/${slot.types[1]}`;
     const altKey = slot.types.length === 2 ? `${slot.types[1]}/${slot.types[0]}` : key;
-    return ALL_COMBOS.find(c => c.label === key || c.label === altKey) || {
+    return combos.find(c => c.label === key || c.label === altKey) || {
       types: slot.types,
       label: key,
       coverageMask: 0,
@@ -120,12 +132,14 @@ export function PartyBuilder() {
         <div className="flex flex-wrap gap-2">
           {TYPES.map(t => {
             const selected = currentSlot.types.includes(t);
-            const disabled = !selected && currentSlot.types.length >= 2;
+            const isUnavailable = unavailable.has(t);
+            const isDisabled = (!selected && currentSlot.types.length >= 2) || isUnavailable;
             return (
               <button
                 key={t}
-                onClick={() => !disabled && toggleType(t)}
-                className={`transition-all ${disabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'} ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
+                onClick={() => !isDisabled && toggleType(t)}
+                title={isUnavailable ? 'Not available in this game' : undefined}
+                className={`transition-all ${isDisabled ? 'opacity-30 cursor-not-allowed' : 'cursor-pointer hover:scale-105'} ${selected ? 'ring-2 ring-offset-1 ring-indigo-500 rounded-full' : ''}`}
               >
                 <TypeBadge type={t} size="sm" />
               </button>
@@ -134,7 +148,7 @@ export function PartyBuilder() {
         </div>
       </div>
 
-      <CoverageGrid coveredTypes={coveredTypes} />
+      <CoverageGrid coveredTypes={coveredTypes} unavailableTypes={unavailableTypes} />
     </div>
   );
 }

@@ -6,10 +6,11 @@ import { PokemonType } from '../data/typeChart';
 interface PokemonCardProps {
   combo: TypeCombo;
   index: number;
+  availableIds?: Set<number>;
 }
 
-export function PokemonCard({ combo, index }: PokemonCardProps) {
-  const examples = getPokemonForTypes(combo.types as PokemonType[]).slice(0, 4);
+export function PokemonCard({ combo, index, availableIds }: PokemonCardProps) {
+  const examples = getPokemonForTypes(combo.types as PokemonType[], availableIds).slice(0, 4);
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col gap-3 border border-gray-100">
