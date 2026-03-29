@@ -20,6 +20,7 @@ export const GAMES: Game[] = [
   // Generation III — 2002
   { id: 'rse',      label: 'Ruby / Sapphire / Emerald',                  shortLabel: 'RSE',        mechGen: 3, group: 'Generation III' },
   { id: 'frlg',     label: 'FireRed / LeafGreen',                        shortLabel: 'FR/LG',      mechGen: 3, group: 'Generation III' },
+  { id: 'xd',       label: 'XD: Gale of Darkness',                       shortLabel: 'XD',         mechGen: 3, group: 'Generation III' },
 
   // Generation IV — 2006
   { id: 'dpp',      label: 'Diamond / Pearl / Platinum',                 shortLabel: 'DPP',        mechGen: 4, group: 'Generation IV' },
